@@ -9,7 +9,9 @@
 
 #include <cassert>
 #include <vector>
+#include <string>
 #include <string_view>
+#include <initializer_list>
 
 #if defined(_CPPUNWIND) && !defined(PATTERNS_SUPPRESS_EXCEPTIONS)
 #define PATTERNS_ENABLE_EXCEPTIONS
@@ -61,7 +63,9 @@ namespace hook
 
 	namespace details
 	{
-		ptrdiff_t get_process_base();
+		ptrdiff_t get_process_base(const std::string& librarys);
+
+		const std::string get_process_name();
 
 		class basic_pattern_impl
 		{
@@ -77,8 +81,15 @@ namespace hook
 
 			bool m_matched = false;
 
+			std::string m_libName;
+
 			uintptr_t m_rangeStart;
 			uintptr_t m_rangeEnd;
+
+			std::vector<std::string> m_sectionNames;
+
+			bool m_findSection = false;
+			bool m_findExecutable = true;
 
 		protected:
 			void Initialize(std::string_view pattern);
@@ -98,33 +109,85 @@ namespace hook
 			{
 			}
 
+			explicit basic_pattern_impl(const std::string& lib_name, uintptr_t begin, uintptr_t end = 0)
+				: m_libName(lib_name), m_rangeStart(begin), m_rangeEnd(end)
+			{
+			}
+
 		public:
 			explicit basic_pattern_impl()
 				: m_rangeStart(0), m_rangeEnd(0)
 			{
 			}
-
+			
+			explicit basic_pattern_impl(const std::string& lib_name, const std::string& section, uintptr_t begin, uintptr_t end = 0)
+				: m_libName(lib_name), m_rangeStart(begin), m_rangeEnd(end)
+			{
+				if (!section.empty())
+				{
+					m_sectionNames.emplace_back(section);
+					m_findSection = true;
+				}
+			}
+			
 			explicit basic_pattern_impl(std::string_view pattern)
-				: basic_pattern_impl(get_process_base())
+				: basic_pattern_impl()
 			{
 				Initialize(std::move(pattern));
 			}
-
+			
 			inline basic_pattern_impl(void* module, std::string_view pattern)
 				: basic_pattern_impl(reinterpret_cast<uintptr_t>(module))
 			{
 				Initialize(std::move(pattern));
 			}
 
+			inline basic_pattern_impl(const std::string& lib_name, void* module, std::string_view pattern)
+				: basic_pattern_impl(lib_name, reinterpret_cast<uintptr_t>(module))
+			{
+				Initialize(std::move(pattern));
+			}
+			
 			inline basic_pattern_impl(uintptr_t begin, uintptr_t end, std::string_view pattern)
 				: basic_pattern_impl(begin, end)
 			{
 				Initialize(std::move(pattern));
 			}
+			
+			inline basic_pattern_impl(const std::string& lib_name, uintptr_t begin, uintptr_t end, std::string_view pattern)
+				: basic_pattern_impl(lib_name, begin, end)
+			{
+				Initialize(std::move(pattern));
+			}
+			
+			inline basic_pattern_impl(const std::string& lib_name, const std::string& section, std::string_view pattern)
+				: basic_pattern_impl(lib_name, section, 0)
+			{
+				Initialize(std::move(pattern));
+			}
+			
+			inline basic_pattern_impl(const std::string& lib_name, std::string& section, uintptr_t begin, uintptr_t end, std::string_view pattern)
+				: basic_pattern_impl(lib_name, section, begin, end)
+			{
+				Initialize(std::move(pattern));
+			}
+			
+			explicit basic_pattern_impl(const std::string& lib_or_section_name, std::string_view pattern)
+			{
+				if (lib_or_section_name.find('.') == std::string::npos)
+				{
+					new(this) basic_pattern_impl(lib_or_section_name, get_process_base(lib_or_section_name));
+					Initialize(std::move(pattern));
+				}
+				else
+				{
+					new(this) basic_pattern_impl(get_process_name(), lib_or_section_name, std::move(pattern));
+				}
+			}
 
 			// Pretransformed patterns
-			inline basic_pattern_impl(std::basic_string_view<uint8_t> bytes, std::basic_string_view<uint8_t> mask)
-				: basic_pattern_impl(get_process_base())
+			inline basic_pattern_impl(const std::string& lib_name, std::basic_string_view<uint8_t> bytes, std::basic_string_view<uint8_t> mask)
+				: basic_pattern_impl(lib_name, get_process_base(lib_name))
 			{
 				assert( bytes.length() == mask.length() );
 				m_bytes = std::move(bytes);
@@ -144,6 +207,28 @@ namespace hook
 	{
 	public:
 		using details::basic_pattern_impl::basic_pattern_impl;
+
+		inline basic_pattern&& section(std::initializer_list<const std::string> sections = {})
+		{
+			if (sections.size())
+			{
+				for (const std::string& section : sections)
+				{
+					if (!section.empty()) m_sectionNames.emplace_back(section);
+				}
+			}
+			m_findSection = true;
+		}
+
+		inline basic_pattern&& segment()
+		{
+			m_findSection = false;
+		}
+
+		inline basic_pattern&& executable(bool findExecutable = true)
+		{
+			m_findExecutable = findExecutable;
+		}
 
 		inline basic_pattern&& count(uint32_t expected)
 		{
@@ -168,6 +253,10 @@ namespace hook
 
 			m_matches.clear();
 			m_matched = false;
+			m_libName.clear();
+			m_findSection = false;
+			m_findExecutable = true;
+			m_sectionNames.clear();
 			return std::forward<basic_pattern>(*this);
 		}
 
@@ -196,7 +285,7 @@ namespace hook
 		template<typename T = void>
 		inline auto get_first(ptrdiff_t offset = 0)
 		{
-			return get_one().get<T>(offset);
+			return get_one().template get<T>(offset);
 		}
 
 		template <typename Pred>

@@ -7,14 +7,67 @@
 
 #include "Hooking.Patterns.h"
 
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
+// #define WIN32_LEAN_AND_MEAN
+// #define NOMINMAX
+#include <unistd.h>
+#include <inttypes.h> 
+#include <fcntl.h>
+#include <sys/mman.h>
 #include <algorithm>
-
-#if PATTERNS_USE_HINTS
+#include <fstream>
 #include <map>
+#include <utility>
+
+#ifdef PATTERNS_USE_XDL
+#include "xdl.h" // https://github.com/hexhacking/xDL
+#define PATTERNS_DL_OPEN(name, flags) xdl_open(name, XDL_DEFAULT)
+#define PATTERNS_DL_ADDR(addr, vname) xdl_info_t vname; \
+void* cache = nullptr; \
+xdl_addr(reinterpret_cast<void*>(addr), &vname, &cache)
+#define PATTERNS_DL_ADDR_CLEAN xdl_addr_clean(&cache)
+#define PATTERNS_DL_ITERATE_PHDR(callback, data) xdl_iterate_phdr(callback, data, XDL_DEFAULT | XDL_FULL_PATHNAME)
+
+#else
+#include <link.h>
+#include <dlfcn.h>
+#define PATTERNS_DL_OPEN(name, flags) dlopen(name, flags)
+#define PATTERNS_DL_ADDR(addr, vname) Dl_info vname; \
+dladdr(reinterpret_cast<void*>(addr), &vname)
+#define PATTERNS_DL_ADDR_CLEAN
+#define PATTERNS_DL_ITERATE_PHDR(callback, data) dl_iterate_phdr(callback, data)
+#endif // PATTERNS_USE_XDL
+
+ // The Android logging library may potentially cause some performance overhead and affect the execution speed of the code. 
+ // However, it is recommended to enable it. If you don't need it, disable it.
+#ifdef PATTERNS_ANDROID_LOGGING
+#include <android/log.h>
+#define PATTERNS_NAME "Hooking.Patterns"
+#define PATTERNS_LOGI(text) ((void)__android_log_write(ANDROID_LOG_INFO, PATTERNS_NAME, text))
+#define PATTERNS_LOGE(text) ((void)__android_log_write(ANDROID_LOG_ERROR, PATTERNS_NAME, text))
+#define PATTERNS_LOGW(text) ((void)__android_log_write(ANDROID_LOG_WARN, PATTERNS_NAME, text))
+#define PATTERNS_LOGIS(text, ...) ((void)__android_log_print(ANDROID_LOG_INFO, PATTERNS_NAME, text, __VA_ARGS__))
+#define PATTERNS_LOGES(text, ...) ((void)__android_log_print(ANDROID_LOG_ERROR, PATTERNS_NAME, text, __VA_ARGS__))
+#define PATTERNS_LOGWS(text, ...) ((void)__android_log_print(ANDROID_LOG_WARN, PATTERNS_NAME, text, __VA_ARGS__))
+#else
+#define PATTERNS_LOGE(text) ((void)0)
+#define PATTERNS_LOGES(...) ((void)0)
+#define PATTERNS_LOGI(text) ((void)0)
+#define PATTERNS_LOGIS(...) ((void)0)
+#define PATTERNS_LOGW(text) ((void)0)
+#define PATTERNS_LOGWS(...) ((void)0)
 #endif
+
+#define PATTERNS_ADDR_FMT "0x%" PRIXPTR
+
+#ifdef __arm__
+typedef Elf32_Ehdr Elf_ehdr;
+typedef elf32_phdr elf_phdr;
+typedef elf32_shdr elf_shdr;
+#elif __aarch64__
+typedef Elf64_Ehdr elf_ehdr;
+typedef elf64_phdr elf_phdr;
+typedef elf64_shdr elf_shdr;
+#endif // 
 
 
 #if PATTERNS_USE_HINTS
@@ -46,10 +99,107 @@ typedef basic_fnv_1<fnv_prime, fnv_offset_basis> fnv_1;
 namespace hook
 {
 
-ptrdiff_t details::get_process_base()
-{
-	return ptrdiff_t(GetModuleHandle(nullptr));
-}
+	ptrdiff_t details::get_process_base(const std::string& librarys)
+	{
+		if (librarys.empty())
+		{
+			PATTERNS_LOGE("get_process_base: librarys is empty.");
+			return 0u;
+		}
+
+		ptrdiff_t base = 0u;
+		std::string buffer;
+		std::ifstream fp("/proc/self/maps");
+		if (fp)
+		{
+			while (std::getline(fp, buffer))
+			{
+				if (buffer.find(librarys) != std::string::npos)
+				{
+					if (buffer.find("00000000") != std::string::npos && buffer.find("r-xp") != std::string::npos)
+					{
+						base = std::stoul(buffer, nullptr, 16);
+						break;
+					}
+				}
+			}
+			fp.close();
+		}
+
+		if (base == 0u)
+		{
+			uintptr_t arg[2] = { (uintptr_t)librarys.c_str(), (uintptr_t)&base };
+			PATTERNS_DL_ITERATE_PHDR([](struct dl_phdr_info* info, size_t size, void* data) ->int
+				{
+					if (info->dlpi_phdr != nullptr)
+					{
+						for (int i = 0; i < info->dlpi_phnum; i++)
+						{
+							if (strstr(info->dlpi_name, reinterpret_cast<const char*>(reinterpret_cast<uintptr_t*>(data)[0]))
+								&& info->dlpi_phdr[i].p_type == PT_LOAD && info->dlpi_phdr[i].p_flags == (PF_R | PF_X))
+							{
+								if (info->dlpi_phdr[i].p_vaddr == 0u) // support for android 9.0+ arm64 elf (eg: libart.so)
+								{
+									reinterpret_cast<uintptr_t*>(data)[1] = info->dlpi_addr;
+									PATTERNS_LOGIS("get_process_base: dl_iterate_phdr info: lib_name: %s, lib_base: " PATTERNS_ADDR_FMT, info->dlpi_name, info->dlpi_addr);
+									return 1; // exit
+								}
+							}
+						}
+					}
+					return 0;
+				}, arg);
+		}
+
+		if (base == 0u)
+		{
+			PATTERNS_LOGE("get_process_base: failed to get base address.");
+		}
+		return base;
+	}
+
+	const std::string details::get_process_name()
+	{
+		std::string buffer;
+		std::ifstream fp("/proc/self/cmdline");
+		if (fp)
+		{
+			std::getline(fp, buffer);
+			fp.close();
+		}
+		return buffer;
+	}
+
+	static std::vector<std::string>& get_process_librarys()
+	{
+		static std::vector<std::string> librarys;
+		librarys.clear();
+		const std::string process_name = details::get_process_name();
+
+		std::string buffer;
+		std::ifstream fp("/proc/self/maps");
+		if (fp)
+		{
+			while (std::getline(fp, buffer))
+			{
+				if (buffer.find(process_name) != std::string::npos && buffer.find("(deleted)") == std::string::npos)
+				{
+					std::string library_name = buffer.substr(buffer.find_last_of('/') + 1);
+
+					if (PATTERNS_DL_OPEN(library_name.c_str(), RTLD_NOLOAD)) // check library is loaded
+					{
+						if (std::find(librarys.begin(), librarys.end(), library_name) == librarys.end())
+						{
+							librarys.emplace_back(library_name);
+						}
+					}
+				}
+			}
+			fp.close();
+		}
+
+		return librarys;
+	}
 
 
 #if PATTERNS_USE_HINTS
@@ -107,48 +257,337 @@ static void TransformPattern(std::string_view pattern, std::basic_string<uint8_t
 class executable_meta
 {
 private:
-	uintptr_t m_begin;
-	uintptr_t m_end;
+	// key: elf head, value: file size
+	std::map<Elf_ehdr*, off_t> m_elf;
 
-	template<typename TReturn, typename TOffset>
-	TReturn* getRVA(TOffset rva)
+	// file section
+	// key: begin : end, value: section name
+	std::map<std::pair<uintptr_t, uintptr_t>, std::string> m_sections;
+	// executable setion form file, only name is .text .plt .init .init_array .fini .fini_array etc
+	std::map<std::pair<uintptr_t, uintptr_t>, std::string> m_executable_sections;
+	
+	// memory segment
+	// key: begin, value: end
+	std::map<uintptr_t, uintptr_t> m_segments;
+	// executable segment form memory, only type is PF_R or PF_X and flags is PT_LOAD
+	std::map<uintptr_t, uintptr_t> m_executable_segments;
+	
+	// library name (path) or process_name
+	std::string m_name;
+
+	void FindLibrarys()
 	{
-		return (TReturn*)(m_begin + rva);
+		m_name = (m_name.empty() ? details::get_process_name() : m_name);
+
+		PATTERNS_DL_ITERATE_PHDR([](struct dl_phdr_info* info, size_t size, void* data) -> int
+			{
+				executable_meta* self = reinterpret_cast<executable_meta*>(data);
+				if (self->m_name.empty())
+				{
+					return 1; // exit
+				}
+
+				static auto ExplainElfSection = [=]() -> bool
+				{
+					bool result = false;
+
+					int fd = open(info->dlpi_name, O_RDONLY | O_CLOEXEC);
+					if (fd == -1)
+					{
+						PATTERNS_LOGES("Explain elf file: open file failed: %s", info->dlpi_name);
+						return result;
+					}
+					off_t fsize = lseek(fd, 0, SEEK_END);
+					if (fsize <= 0)
+					{
+						PATTERNS_LOGES("Explain elf file: get file size failed: %s", info->dlpi_name);
+						close(fd);
+						return result;
+					}
+					void* fdata = mmap(nullptr, fsize, PROT_READ, MAP_PRIVATE, fd, 0);
+					close(fd);
+					if (fdata == MAP_FAILED)
+					{
+						PATTERNS_LOGES("Explain elf file: mmap failed: %d - %s", errno, strerror(errno));
+						return result;
+					}
+					Elf_ehdr* ehdr = reinterpret_cast<Elf_ehdr*>(fdata);
+					if (ehdr->e_ident[EI_MAG0] != 0x7F || ehdr->e_ident[EI_MAG1] != 'E' || ehdr->e_ident[EI_MAG2] != 'L' || ehdr->e_ident[EI_MAG3] != 'F')
+					{
+						PATTERNS_LOGES("Explain elf file: this is not an ELF file: %s", info->dlpi_name);
+						munmap(fdata, fsize);
+						return result;
+					}
+
+					elf_shdr* shdr = reinterpret_cast<elf_shdr*>(((uintptr_t)ehdr) + ehdr->e_shoff);
+					uintptr_t shdr_addr = (uintptr_t)shdr;
+					char* shstrtab = reinterpret_cast<char*>((uintptr_t)ehdr + shdr[ehdr->e_shstrndx].sh_offset);
+
+					for (int i = 0; i < ehdr->e_shnum; i++, shdr_addr += ehdr->e_shentsize)
+					{
+						elf_shdr* sec_info = reinterpret_cast<elf_shdr*>(shdr_addr);
+
+						std::string name = shstrtab + sec_info->sh_name;
+						if (sec_info->sh_type == SHT_PROGBITS && sec_info->sh_flags == (SHF_ALLOC | SHF_EXECINSTR))
+						{
+							self->m_executable_sections.emplace(std::make_pair(info->dlpi_addr + sec_info->sh_addr,
+								info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size), name);
+							PATTERNS_LOGIS("Explain elf file: executable section: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", section_name: %s, section_start: " PATTERNS_ADDR_FMT ", section_end: " PATTERNS_ADDR_FMT,
+								self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, name.c_str(), info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size);
+						}
+						self->m_sections.emplace(std::make_pair(info->dlpi_addr + sec_info->sh_addr,
+							info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size), name);
+						PATTERNS_LOGIS("Explain elf file: section: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", section_name: %s, section_start: " PATTERNS_ADDR_FMT ", section_end: " PATTERNS_ADDR_FMT,
+							self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, name.c_str(), info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size);
+					}
+
+					self->m_elf.emplace(ehdr, fsize);
+					return true;
+				};
+
+				static const std::string process_name = details::get_process_name();
+				if (self->m_name == process_name) // = process name
+				{
+					// lib_name: xxx.so 
+					// info->dlpi_name: /.../.../xxx.so
+					static std::vector<std::string> section_lib_name = get_process_librarys();
+					static std::vector<std::string> segment_lib_name = section_lib_name;
+					if (section_lib_name.empty() || segment_lib_name.empty())
+					{
+						return 1; // exit
+					}
+					for (auto i = section_lib_name.begin(); i != section_lib_name.end();)
+					{
+						if (strstr(info->dlpi_name, i->c_str()) && strstr(info->dlpi_name, process_name.c_str()))
+						{
+							if (ExplainElfSection())
+							{
+								i = section_lib_name.erase(i);
+								continue; // next
+							}
+							PATTERNS_LOGWS("Explain Elf files failed: %s", info->dlpi_name);
+						}
+						++i; // next
+					}
+
+					for (auto l = segment_lib_name.begin(); l != segment_lib_name.end();)
+					{
+						if (strstr(info->dlpi_name, l->c_str()) && strstr(info->dlpi_name, process_name.c_str()))
+						{
+							if (info->dlpi_phdr != nullptr)
+							{
+								for (int j = 0; j < info->dlpi_phnum; j++)
+								{
+									if (info->dlpi_phdr[j].p_type == PT_LOAD && info->dlpi_phdr[j].p_flags == (PF_R | PF_X))
+									{
+										self->m_executable_segments[info->dlpi_addr + info->dlpi_phdr[j].p_vaddr] =
+											info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz;
+										PATTERNS_LOGIS("Explain elf file: executable segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT,
+											self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+									}
+									self->m_executable_segments[info->dlpi_addr + info->dlpi_phdr[j].p_vaddr] =
+										info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz;
+									PATTERNS_LOGIS("Explain elf file: segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT,
+										self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+								}
+								l = segment_lib_name.erase(l);
+								continue; // next
+							}
+						}
+						++l; // next
+					}
+				}
+				else // = library name(path)
+				{
+					if (strstr(info->dlpi_name, self->m_name.c_str()))
+					{
+						if (ExplainElfSection() || info->dlpi_phdr != nullptr)
+						{
+							for (int j = 0; j < info->dlpi_phnum; j++)
+							{
+								if (info->dlpi_phdr[j].p_type == PT_LOAD && info->dlpi_phdr[j].p_flags == (PF_R | PF_X))
+								{
+									self->m_executable_segments[info->dlpi_addr + info->dlpi_phdr[j].p_vaddr] =
+										info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz;
+									PATTERNS_LOGIS("Explain elf file: executable segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT,
+										self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+								}
+								self->m_executable_segments[info->dlpi_addr + info->dlpi_phdr[j].p_vaddr] =
+									info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz;
+								PATTERNS_LOGIS("Explain elf file: segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT,
+									self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+							}
+							return 1; // exit
+						}
+						PATTERNS_LOGWS("Explain Elf files failed: %s", info->dlpi_name);
+					}
+				}
+				return 0;
+			}, this);
+	}
+
+	explicit executable_meta(const std::string& lib_name)
+		: m_name(lib_name.empty() ? m_name : lib_name)
+	{
 	}
 
 public:
-	explicit executable_meta(uintptr_t module)
-		: m_begin(module), m_end(0)
+	void Initialize(uintptr_t begin)
 	{
-		static auto getSection = [](const PIMAGE_NT_HEADERS nt_headers, unsigned section) -> PIMAGE_SECTION_HEADER
+		if (m_name.empty())
 		{
-			return reinterpret_cast<PIMAGE_SECTION_HEADER>(
-				(UCHAR*)nt_headers->OptionalHeader.DataDirectory +
-				nt_headers->OptionalHeader.NumberOfRvaAndSizes * sizeof(IMAGE_DATA_DIRECTORY) +
-				section * sizeof(IMAGE_SECTION_HEADER));
-		};
+			PATTERNS_DL_ADDR(begin, info);
+			if (info.dli_fbase == nullptr)
+			{
+				return;
+			}
+			if (info.dli_fname != nullptr)
+			{
+				m_name = info.dli_fname;
+			}
+			PATTERNS_DL_ADDR_CLEAN;
+		}
+		
+		FindLibrarys();
 
-		PIMAGE_DOS_HEADER dosHeader = getRVA<IMAGE_DOS_HEADER>(0);
-		PIMAGE_NT_HEADERS ntHeader = getRVA<IMAGE_NT_HEADERS>(dosHeader->e_lfanew);
-
-		for (int i = 0; i < ntHeader->FileHeader.NumberOfSections; i++)
+		if (!m_sections.empty())
 		{
-			auto sec = getSection(ntHeader, i);
-			auto secSize = sec->SizeOfRawData != 0 ? sec->SizeOfRawData : sec->Misc.VirtualSize;
-			if (sec->Characteristics & IMAGE_SCN_MEM_EXECUTE)
-				m_end = m_begin + sec->VirtualAddress + secSize;
-			if ((i == ntHeader->FileHeader.NumberOfSections - 1) && m_end == 0)
-				m_end = m_begin + sec->PointerToRawData + secSize;
+			for (auto& section : m_sections)
+			{
+				if (section.first.first <= begin && begin < section.first.second)
+				{
+					uintptr_t end = section.first.second;
+					const std::string name = section.second;
+					m_sections.clear();
+					m_sections[std::make_pair(begin, end)] = name;
+					m_executable_sections.clear();
+					m_executable_sections[std::make_pair(begin, end)] = name;
+					break;
+				}
+			}
+		}
+		if (!m_segments.empty())
+		{
+			for (auto& segment : m_segments)
+			{
+				if (segment.first <= begin && begin < segment.second)
+				{
+					uintptr_t end = segment.second;
+					m_segments.clear();
+					m_segments[begin] = end;
+					m_executable_segments.clear();
+					m_executable_segments[begin] = end;
+					break;
+				}
+			}
 		}
 	}
 
-	executable_meta(uintptr_t begin, uintptr_t end)
-		: m_begin(begin), m_end(end)
+	void Initialize(uintptr_t begin, uintptr_t end)
 	{
+		if (begin >= end)
+		{
+			PATTERNS_LOGE("executable_meta: begin >= end.");
+			return;
+		}
+		if (begin == 0u && end == 0u)
+		{
+			PATTERNS_LOGW("executable_meta: begin and end is 0. find all segments or sections in the process by default.");
+			FindLibrarys();
+			return;
+		}
+		if (end == 0u)
+		{
+			Initialize(begin);
+			return;
+		}
+		if (begin == 0)
+		{
+			if (m_name.empty())
+			{
+				PATTERNS_DL_ADDR(end, info);
+				if (info.dli_fbase == nullptr)
+				{
+					return;
+				}
+				if (info.dli_fname != nullptr)
+				{
+					m_name = info.dli_fname;
+				}
+				PATTERNS_DL_ADDR_CLEAN;
+			}
+			
+			FindLibrarys();
+
+			if (!m_sections.empty())
+			{
+				for (auto& section : m_sections)
+				{
+					if (section.first.first < end && end <= section.first.second)
+					{
+						begin = section.first.first;
+						const std::string name = section.second;
+						m_sections.clear();
+						m_sections[std::make_pair(begin, end)] = name;
+						m_executable_sections.clear();
+						m_executable_sections[std::make_pair(begin, end)] = name;
+						break;
+					}
+				}
+			}
+			if (!m_segments.empty())
+			{
+				for (auto& segment : m_segments)
+				{
+					if (segment.first < end && end <= segment.second)
+					{
+						begin = segment.first;
+						m_segments.clear();
+						m_segments[begin] = end;
+						m_executable_segments.clear();
+						m_executable_segments[begin] = end;
+						break;
+					}
+				}
+			}
+			return;
+		}
+
+		m_sections[std::make_pair(begin, end)] = std::string::npos;
+		m_executable_sections[std::make_pair(begin, end)] = std::string::npos;
+		m_segments[begin] = end;
+		m_executable_segments[begin] = end;
 	}
 
-	inline uintptr_t begin() const { return m_begin; }
-	inline uintptr_t end() const   { return m_end; }
+	executable_meta(uintptr_t begin = 0, uintptr_t end = 0, const std::string& lib_name = "")
+		: executable_meta(lib_name) 
+	{
+		Initialize(begin, end);
+	}
+
+	~executable_meta()
+	{
+		for (auto& elf : m_elf)
+		{
+			munmap(elf.first, elf.second);
+		}
+		m_elf.clear();
+		m_name.clear();
+		m_sections.clear();
+		m_executable_sections.clear();
+		m_segments.clear();
+		m_executable_segments.clear();
+	}
+
+	inline const std::map<std::pair<uintptr_t, uintptr_t>, std::string>& get_sections(bool is_executable)
+	{
+		return is_executable ? m_executable_sections : m_sections;
+	}
+
+	inline const std::map<uintptr_t, uintptr_t>& get_segments(bool is_executable)
+	{
+		return is_executable ? m_executable_segments : m_segments;
+	}
 };
 
 namespace details
@@ -192,15 +631,15 @@ void basic_pattern_impl::Initialize(std::string_view pattern)
 
 void basic_pattern_impl::EnsureMatches(uint32_t maxCount)
 {
-	if (m_matched || (!m_rangeStart && !m_rangeEnd))
+	if (m_matched || (!m_rangeStart && !m_rangeEnd && m_libName.empty()))
 	{
 		return;
 	}
 
 	// scan the executable for code
-	executable_meta executable = m_rangeStart != 0 && m_rangeEnd != 0 ? executable_meta(m_rangeStart, m_rangeEnd) : executable_meta(m_rangeStart);
+	executable_meta executable = executable_meta(m_rangeStart, m_rangeEnd, m_libName);
 
-	auto matchSuccess = [&] (uintptr_t address)
+	auto matchSuccess = [&](uintptr_t address)
 	{
 #if PATTERNS_USE_HINTS
 		getHints().emplace(m_hash, address);
@@ -218,40 +657,80 @@ void basic_pattern_impl::EnsureMatches(uint32_t maxCount)
 
 	ptrdiff_t Last[256];
 
-	std::fill(std::begin(Last), std::end(Last), lastWild == std::string::npos ? -1 : static_cast<ptrdiff_t>(lastWild) );
+	std::fill(std::begin(Last), std::end(Last), lastWild == std::string::npos ? -1 : static_cast<ptrdiff_t>(lastWild));
 
-	for ( ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(maskSize); ++i )
+	for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(maskSize); ++i)
 	{
-		if ( Last[ pattern[i] ] < i )
+		if (Last[pattern[i]] < i)
 		{
-			Last[ pattern[i] ] = i;
+			Last[pattern[i]] = i;
 		}
 	}
 
-	__try
+	static auto FindPatterns = [&](uintptr_t begin, uintptr_t end) -> bool
 	{
-		for (uintptr_t i = executable.begin(), end = executable.end() - maskSize; i <= end;)
+		try
 		{
-			uint8_t* ptr = reinterpret_cast<uint8_t*>(i);
-			ptrdiff_t j = maskSize - 1;
-
-			while ((j >= 0) && pattern[j] == (ptr[j] & mask[j])) j--;
-
-			if (j < 0)
+			for (uintptr_t i = begin, end = end - maskSize; i <= end;)
 			{
-				m_matches.emplace_back(ptr);
+				uint8_t* ptr = reinterpret_cast<uint8_t*>(i);
+				ptrdiff_t j = maskSize - 1;
 
-				if (matchSuccess(i))
+				while ((j >= 0) && pattern[j] == (ptr[j] & mask[j])) j--;
+
+				if (j < 0)
 				{
-					break;
+					m_matches.emplace_back(ptr);
+
+					if (matchSuccess(i))
+					{
+						break;
+					}
+					i++;
 				}
-				i++;
+				else
+				{
+					i += std::max(ptrdiff_t(1), j - Last[ptr[j]]);
+				}
 			}
-			else i += std::max(ptrdiff_t(1), j - Last[ptr[j]]);
+		}
+		catch (const std::exception& e)
+		{
+			PATTERNS_LOGES("FindPatterns: %s", e.what());
+			return false;
+		}
+
+		return true;
+	};
+	
+	if (m_findSection)
+	{
+		auto& sections = executable.get_sections(m_findExecutable);
+		for (auto& section : sections)
+		{
+			if (m_sectionNames.empty())
+			{
+				FindPatterns(section.first.first, section.first.second);
+			}
+			else
+			{
+				for (auto& sectionName : m_sectionNames)
+				{
+					if (section.second == sectionName)
+					{
+						FindPatterns(section.first.first, section.first.second);
+					}
+				}
+			}
 		}
 	}
-	__except ((GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+	else
 	{
+		auto& segments = executable.get_segments(m_findExecutable);
+		for (auto& segment : segments)
+		{
+			FindPatterns(segment.first, segment.second);
+		}
 	}
 
 	m_matched = true;
