@@ -7,8 +7,6 @@
 
 #include "Hooking.Patterns.h"
 
-// #define WIN32_LEAN_AND_MEAN
-// #define NOMINMAX
 #include <unistd.h>
 #include <inttypes.h> 
 #include <fcntl.h>
@@ -26,7 +24,6 @@ void* cache = nullptr; \
 xdl_addr(reinterpret_cast<void*>(addr), &vname, &cache)
 #define PATTERNS_DL_ADDR_CLEAN xdl_addr_clean(&cache)
 #define PATTERNS_DL_ITERATE_PHDR(callback, data) xdl_iterate_phdr(callback, data, XDL_DEFAULT | XDL_FULL_PATHNAME)
-
 #else
 #include <link.h>
 #include <dlfcn.h>
@@ -57,16 +54,16 @@ dladdr(reinterpret_cast<void*>(addr), &vname)
 #define PATTERNS_LOGWS(...) ((void)0)
 #endif
 
-#define PATTERNS_ADDR_FMT "0x%" PRIXPTR
-
 #ifdef __arm__
 typedef Elf32_Ehdr Elf_ehdr;
 typedef elf32_phdr elf_phdr;
 typedef elf32_shdr elf_shdr;
+#define PATTERNS_ADDR_FMT "0x%" PRIx32
 #elif __aarch64__
-typedef Elf64_Ehdr elf_ehdr;
+typedef Elf64_Ehdr Elf_ehdr;
 typedef elf64_phdr elf_phdr;
 typedef elf64_shdr elf_shdr;
+#define PATTERNS_ADDR_FMT "0x%" PRIx64
 #endif // 
 
 
@@ -114,13 +111,10 @@ namespace hook
 		{
 			while (std::getline(fp, buffer))
 			{
-				if (buffer.find(librarys) != std::string::npos)
+				if (buffer.find(librarys) != std::string::npos && buffer.find("00000000") != std::string::npos)
 				{
-					if (buffer.find("00000000") != std::string::npos && buffer.find("r-xp") != std::string::npos)
-					{
-						base = std::stoul(buffer, nullptr, 16);
-						break;
-					}
+					base = std::stoul(buffer, nullptr, 16);
+					break;
 				}
 			}
 			fp.close();
@@ -129,21 +123,18 @@ namespace hook
 		if (base == 0u)
 		{
 			uintptr_t arg[2] = { (uintptr_t)librarys.c_str(), (uintptr_t)&base };
-			PATTERNS_DL_ITERATE_PHDR([](struct dl_phdr_info* info, size_t size, void* data) ->int
+			PATTERNS_DL_ITERATE_PHDR([](struct dl_phdr_info* info, size_t size, void* data) -> int
 				{
 					if (info->dlpi_phdr != nullptr)
 					{
 						for (int i = 0; i < info->dlpi_phnum; i++)
 						{
-							if (strstr(info->dlpi_name, reinterpret_cast<const char*>(reinterpret_cast<uintptr_t*>(data)[0]))
-								&& info->dlpi_phdr[i].p_type == PT_LOAD && info->dlpi_phdr[i].p_flags == (PF_R | PF_X))
+							if (strstr(info->dlpi_name, reinterpret_cast<const char*>(reinterpret_cast<uintptr_t*>(data)[0])) 
+								&& info->dlpi_phdr[i].p_type == PT_LOAD && info->dlpi_phdr[i].p_vaddr == 0u) // support for android 9.0+ arm64 elf (eg: libart.so)
 							{
-								if (info->dlpi_phdr[i].p_vaddr == 0u) // support for android 9.0+ arm64 elf (eg: libart.so)
-								{
-									reinterpret_cast<uintptr_t*>(data)[1] = info->dlpi_addr;
-									PATTERNS_LOGIS("get_process_base: dl_iterate_phdr info: lib_name: %s, lib_base: " PATTERNS_ADDR_FMT, info->dlpi_name, info->dlpi_addr);
-									return 1; // exit
-								}
+								*reinterpret_cast<uintptr_t**>(data)[1] = info->dlpi_addr;
+								PATTERNS_LOGIS("get_process_base: dl_iterate_phdr info: lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", info->dlpi_name, info->dlpi_addr);
+								return 1; // exit
 							}
 						}
 					}
@@ -191,6 +182,7 @@ namespace hook
 						if (std::find(librarys.begin(), librarys.end(), library_name) == librarys.end())
 						{
 							librarys.emplace_back(library_name);
+							PATTERNS_LOGIS("get_process_librarys: The library '%s' has been loaded and the search was successful.", library_name.c_str());
 						}
 					}
 				}
@@ -259,18 +251,19 @@ class executable_meta
 private:
 	// key: elf head, value: file size
 	std::map<Elf_ehdr*, off_t> m_elf;
-
-	// file section
-	// key: begin : end, value: section name
-	std::map<std::pair<uintptr_t, uintptr_t>, std::string> m_sections;
-	// executable setion form file, only name is .text .plt .init .init_array .fini .fini_array etc
-	std::map<std::pair<uintptr_t, uintptr_t>, std::string> m_executable_sections;
 	
+	// file section
+	// key: lib_name : section_name, value: begin : end
+	// All readable sections form file
+	std::map<std::pair<const std::string, const std::string>, std::pair<uintptr_t, uintptr_t>> m_sections;
+	// executable setion form file, only name is .text .plt .init .init_array .fini .fini_array etc
+	std::map<std::pair<const std::string, const std::string>, std::pair<uintptr_t, uintptr_t>> m_executable_sections;
+
 	// memory segment
-	// key: begin, value: end
-	std::map<uintptr_t, uintptr_t> m_segments;
+	// key: lib_name : id, value: begin : end
+	std::map<std::pair<const std::string, uint16_t>, std::pair<uintptr_t, uintptr_t>> m_segments;
 	// executable segment form memory, only type is PF_R or PF_X and flags is PT_LOAD
-	std::map<uintptr_t, uintptr_t> m_executable_segments;
+	std::map<std::pair<const std::string, uint16_t>, std::pair<uintptr_t, uintptr_t>> m_executable_segments;
 	
 	// library name (path) or process_name
 	std::string m_name;
@@ -278,7 +271,7 @@ private:
 	void FindLibrarys()
 	{
 		m_name = (m_name.empty() ? details::get_process_name() : m_name);
-
+		
 		PATTERNS_DL_ITERATE_PHDR([](struct dl_phdr_info* info, size_t size, void* data) -> int
 			{
 				executable_meta* self = reinterpret_cast<executable_meta*>(data);
@@ -287,7 +280,7 @@ private:
 					return 1; // exit
 				}
 
-				static auto ExplainElfSection = [=]() -> bool
+				auto ExplainElfSection = [=]() -> bool
 				{
 					bool result = false;
 
@@ -304,7 +297,7 @@ private:
 						close(fd);
 						return result;
 					}
-					void* fdata = mmap(nullptr, fsize, PROT_READ, MAP_PRIVATE, fd, 0);
+					void* fdata = mmap(nullptr, fsize, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 					close(fd);
 					if (fdata == MAP_FAILED)
 					{
@@ -330,15 +323,20 @@ private:
 						std::string name = shstrtab + sec_info->sh_name;
 						if (sec_info->sh_type == SHT_PROGBITS && sec_info->sh_flags == (SHF_ALLOC | SHF_EXECINSTR))
 						{
-							self->m_executable_sections.emplace(std::make_pair(info->dlpi_addr + sec_info->sh_addr,
-								info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size), name);
-							PATTERNS_LOGIS("Explain elf file: executable section: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", section_name: %s, section_start: " PATTERNS_ADDR_FMT ", section_end: " PATTERNS_ADDR_FMT,
-								self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, name.c_str(), info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size);
+							self->m_executable_sections.emplace(std::make_pair(info->dlpi_name, name), 
+								std::make_pair(info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size));
+							PATTERNS_LOGIS("Explain elf file: executable section: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
+							PATTERNS_LOGIS("section info: section_name: %s, section_start: " PATTERNS_ADDR_FMT ", section_end: " PATTERNS_ADDR_FMT "", name.c_str(), info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size);
 						}
-						self->m_sections.emplace(std::make_pair(info->dlpi_addr + sec_info->sh_addr,
-							info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size), name);
-						PATTERNS_LOGIS("Explain elf file: section: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", section_name: %s, section_start: " PATTERNS_ADDR_FMT ", section_end: " PATTERNS_ADDR_FMT,
-							self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, name.c_str(), info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size);
+						if (sec_info->sh_addr == 0 && name.empty()) // .elf_head
+						{
+							name = ".elf_head";
+							sec_info->sh_size = ehdr->e_ehsize;
+						}
+						self->m_sections.emplace(std::make_pair(info->dlpi_name, name), 
+							std::make_pair(info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size));
+						PATTERNS_LOGIS("Explain elf file: section: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
+						PATTERNS_LOGIS("section info: section_name: %s, section_start: " PATTERNS_ADDR_FMT ", section_end: " PATTERNS_ADDR_FMT "", name.c_str(), info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size);
 					}
 
 					self->m_elf.emplace(ehdr, fsize);
@@ -356,6 +354,7 @@ private:
 					{
 						return 1; // exit
 					}
+
 					for (auto i = section_lib_name.begin(); i != section_lib_name.end();)
 					{
 						if (strstr(info->dlpi_name, i->c_str()) && strstr(info->dlpi_name, process_name.c_str()))
@@ -380,15 +379,19 @@ private:
 								{
 									if (info->dlpi_phdr[j].p_type == PT_LOAD && info->dlpi_phdr[j].p_flags == (PF_R | PF_X))
 									{
-										self->m_executable_segments[info->dlpi_addr + info->dlpi_phdr[j].p_vaddr] =
-											info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz;
-										PATTERNS_LOGIS("Explain elf file: executable segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT,
-											self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+										self->m_executable_segments.emplace(std::make_pair(info->dlpi_name, j), 
+											std::make_pair(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
+										PATTERNS_LOGIS("Explain elf file: executable segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", 
+											self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
+										PATTERNS_LOGIS("segment info: id: %d, segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT "", 
+											j, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
 									}
-									self->m_executable_segments[info->dlpi_addr + info->dlpi_phdr[j].p_vaddr] =
-										info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz;
-									PATTERNS_LOGIS("Explain elf file: segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT,
-										self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+									self->m_segments.emplace(std::make_pair(info->dlpi_name, j), 
+										std::make_pair(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
+									PATTERNS_LOGIS("Explain elf file: segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", 
+										self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
+									PATTERNS_LOGIS("segment info: id: %d, segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT "", 
+										j, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
 								}
 								l = segment_lib_name.erase(l);
 								continue; // next
@@ -407,15 +410,19 @@ private:
 							{
 								if (info->dlpi_phdr[j].p_type == PT_LOAD && info->dlpi_phdr[j].p_flags == (PF_R | PF_X))
 								{
-									self->m_executable_segments[info->dlpi_addr + info->dlpi_phdr[j].p_vaddr] =
-										info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz;
-									PATTERNS_LOGIS("Explain elf file: executable segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT,
-										self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+									self->m_executable_segments.emplace(std::make_pair(info->dlpi_name, j), 
+										std::make_pair(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
+									PATTERNS_LOGIS("Explain elf file: executable segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", 
+										self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
+									PATTERNS_LOGIS("segment info: id: %d, segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT "", 
+										j, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
 								}
-								self->m_executable_segments[info->dlpi_addr + info->dlpi_phdr[j].p_vaddr] =
-									info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz;
-								PATTERNS_LOGIS("Explain elf file: segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT ", segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT,
-									self->m_name.c_str(), info->dlpi_name, info->dlpi_addr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+								self->m_segments.emplace(std::make_pair(info->dlpi_name, j), 
+									std::make_pair(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
+								PATTERNS_LOGIS("Explain elf file: segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", 
+									self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
+								PATTERNS_LOGIS("segment info: id: %d, segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT "", 
+									j, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
 							}
 							return 1; // exit
 						}
@@ -454,14 +461,14 @@ public:
 		{
 			for (auto& section : m_sections)
 			{
-				if (section.first.first <= begin && begin < section.first.second)
+				if (section.second.first <= begin && begin < section.second.second)
 				{
-					uintptr_t end = section.first.second;
-					const std::string name = section.second;
+					uintptr_t end = section.second.second;
+					std::pair<const std::string, const std::string> name = section.first;
 					m_sections.clear();
-					m_sections[std::make_pair(begin, end)] = name;
+					m_sections.emplace(name, std::make_pair(begin, end));
 					m_executable_sections.clear();
-					m_executable_sections[std::make_pair(begin, end)] = name;
+					m_executable_sections.emplace(name, std::make_pair(begin, end));
 					break;
 				}
 			}
@@ -470,13 +477,14 @@ public:
 		{
 			for (auto& segment : m_segments)
 			{
-				if (segment.first <= begin && begin < segment.second)
+				if (segment.second.first <= begin && begin < segment.second.second)
 				{
-					uintptr_t end = segment.second;
+					uintptr_t end = segment.second.second;
+					std::pair<const std::string, uint16_t> name = segment.first;
 					m_segments.clear();
-					m_segments[begin] = end;
+					m_segments.emplace(name, std::make_pair(begin, end));
 					m_executable_segments.clear();
-					m_executable_segments[begin] = end;
+					m_executable_segments.emplace(name, std::make_pair(begin, end));
 					break;
 				}
 			}
@@ -485,9 +493,9 @@ public:
 
 	void Initialize(uintptr_t begin, uintptr_t end)
 	{
-		if (begin >= end)
+		if (begin >= end && begin != 0u && end != 0u)
 		{
-			PATTERNS_LOGE("executable_meta: begin >= end.");
+			PATTERNS_LOGE("executable_meta: begin >= end");
 			return;
 		}
 		if (begin == 0u && end == 0u)
@@ -523,14 +531,14 @@ public:
 			{
 				for (auto& section : m_sections)
 				{
-					if (section.first.first < end && end <= section.first.second)
+					if (section.second.first < end && end <= section.second.second)
 					{
-						begin = section.first.first;
-						const std::string name = section.second;
+						begin = section.second.first;
+						std::pair<const std::string, const std::string> name = section.first;
 						m_sections.clear();
-						m_sections[std::make_pair(begin, end)] = name;
+						m_sections.emplace(name, std::make_pair(begin, end));
 						m_executable_sections.clear();
-						m_executable_sections[std::make_pair(begin, end)] = name;
+						m_executable_sections.emplace(name, std::make_pair(begin, end));
 						break;
 					}
 				}
@@ -539,13 +547,14 @@ public:
 			{
 				for (auto& segment : m_segments)
 				{
-					if (segment.first < end && end <= segment.second)
+					if (segment.second.first < end && end <= segment.second.second)
 					{
-						begin = segment.first;
+						begin = segment.second.first;
+						std::pair<const std::string, uint16_t> name = segment.first;
 						m_segments.clear();
-						m_segments[begin] = end;
+						m_segments.emplace(name, std::make_pair(begin, end));
 						m_executable_segments.clear();
-						m_executable_segments[begin] = end;
+						m_executable_segments.emplace(name, std::make_pair(begin, end));
 						break;
 					}
 				}
@@ -553,14 +562,51 @@ public:
 			return;
 		}
 
-		m_sections[std::make_pair(begin, end)] = std::string::npos;
-		m_executable_sections[std::make_pair(begin, end)] = std::string::npos;
-		m_segments[begin] = end;
-		m_executable_segments[begin] = end;
+		std::pair<std::string, std::string> section_name;
+		std::pair<std::string, uint16_t> segment_name;
+		if (!m_name.empty())
+		{
+			FindLibrarys();
+
+			if (!m_sections.empty())
+			{
+				for (auto& section : m_sections)
+				{
+					if (section.second.first <= begin && end <= section.second.second)
+					{
+						section_name = section.first;
+						break;
+					}
+				}
+			}
+
+			if (!m_segments.empty())
+			{
+				for (auto& segment : m_segments)
+				{
+					if (segment.second.first <= begin && end <= segment.second.second)
+					{
+						segment_name = segment.first;
+						goto end;
+					}
+				}
+			}
+			PATTERNS_LOGE("executable_meta: begin and end is not in the same segment or section.");
+			return;
+		}
+	end:
+		m_sections.clear();
+		m_sections.emplace(section_name, std::make_pair(begin, end));
+		m_executable_sections.clear();
+		m_executable_sections.emplace(section_name, std::make_pair(begin, end));
+		m_segments.clear();
+		m_segments.emplace(segment_name, std::make_pair(begin, end));
+		m_executable_segments.clear();
+		m_executable_segments.emplace(segment_name, std::make_pair(begin, end));
 	}
 
-	executable_meta(uintptr_t begin = 0, uintptr_t end = 0, const std::string& lib_name = "")
-		: executable_meta(lib_name) 
+	executable_meta(uintptr_t begin, uintptr_t end, const std::string& lib_name)
+		: executable_meta(lib_name)
 	{
 		Initialize(begin, end);
 	}
@@ -579,12 +625,12 @@ public:
 		m_executable_segments.clear();
 	}
 
-	inline const std::map<std::pair<uintptr_t, uintptr_t>, std::string>& get_sections(bool is_executable)
+	inline const std::map<std::pair<const std::string, const std::string>, std::pair<uintptr_t, uintptr_t>>& get_sections(bool is_executable)
 	{
 		return is_executable ? m_executable_sections : m_sections;
 	}
 
-	inline const std::map<uintptr_t, uintptr_t>& get_segments(bool is_executable)
+	inline const std::map<std::pair<const std::string, uint16_t>, std::pair<uintptr_t, uintptr_t>>& get_segments(bool is_executable)
 	{
 		return is_executable ? m_executable_segments : m_segments;
 	}
@@ -667,11 +713,11 @@ void basic_pattern_impl::EnsureMatches(uint32_t maxCount)
 		}
 	}
 
-	static auto FindPatterns = [&](uintptr_t begin, uintptr_t end) -> bool
+	static auto Matches = [&](uintptr_t begin, uintptr_t end) -> void
 	{
 		try
 		{
-			for (uintptr_t i = begin, end = end - maskSize; i <= end;)
+			for (uintptr_t i = begin, ends = end - maskSize; i <= ends;)
 			{
 				uint8_t* ptr = reinterpret_cast<uint8_t*>(i);
 				ptrdiff_t j = maskSize - 1;
@@ -681,7 +727,6 @@ void basic_pattern_impl::EnsureMatches(uint32_t maxCount)
 				if (j < 0)
 				{
 					m_matches.emplace_back(ptr);
-
 					if (matchSuccess(i))
 					{
 						break;
@@ -696,11 +741,8 @@ void basic_pattern_impl::EnsureMatches(uint32_t maxCount)
 		}
 		catch (const std::exception& e)
 		{
-			PATTERNS_LOGES("FindPatterns: %s", e.what());
-			return false;
+			PATTERNS_LOGES("Matches exceptional: %s", e.what());
 		}
-
-		return true;
 	};
 	
 	if (m_findSection)
@@ -708,17 +750,95 @@ void basic_pattern_impl::EnsureMatches(uint32_t maxCount)
 		auto& sections = executable.get_sections(m_findExecutable);
 		for (auto& section : sections)
 		{
-			if (m_sectionNames.empty())
+			if (m_ignoreLibrarys.empty())
 			{
-				FindPatterns(section.first.first, section.first.second);
+				if (m_sectionNames.empty())
+				{
+					if (m_ignoreSections.empty())
+					{
+						Matches(section.second.first, section.second.second);
+					}
+					else
+					{
+						for (auto& ignoreSection : m_ignoreSections)
+						{
+							if (section.first.second != ignoreSection)
+							{
+								Matches(section.second.first, section.second.second);
+							}
+						}
+					}
+				}
+				else
+				{
+					for (auto& sectionName : m_sectionNames)
+					{
+						if (section.first.second == sectionName)
+						{
+							if (m_ignoreSections.empty())
+							{
+								Matches(section.second.first, section.second.second);
+							}
+							else
+							{
+								for (auto& ignoreSection : m_ignoreSections)
+								{
+									if (section.first.second != ignoreSection)
+									{
+										Matches(section.second.first, section.second.second);
+									}
+								}
+							}
+						}
+					}
+				}
 			}
 			else
 			{
-				for (auto& sectionName : m_sectionNames)
+				for (auto& ignoreLibrary : m_ignoreLibrarys)
 				{
-					if (section.second == sectionName)
+					if (section.first.first != ignoreLibrary)
 					{
-						FindPatterns(section.first.first, section.first.second);
+						if (m_sectionNames.empty())
+						{
+							if (m_ignoreSections.empty())
+							{
+								Matches(section.second.first, section.second.second);
+							}
+							else
+							{
+								for (auto& ignoreSection : m_ignoreSections)
+								{
+									if (section.first.second != ignoreSection)
+									{
+										Matches(section.second.first, section.second.second);
+									}
+								}
+							}
+						}
+						else
+						{
+							for (auto& sectionName : m_sectionNames)
+							{
+								if (section.first.second == sectionName)
+								{
+									if (m_ignoreSections.empty())
+									{
+										Matches(section.second.first, section.second.second);
+									}
+									else
+									{
+										for (auto& ignoreSection : m_ignoreSections)
+										{
+											if (section.first.second != ignoreSection)
+											{
+												Matches(section.second.first, section.second.second);
+											}
+										}
+									}
+								}
+							}
+						}
 					}
 				}
 			}
@@ -729,7 +849,20 @@ void basic_pattern_impl::EnsureMatches(uint32_t maxCount)
 		auto& segments = executable.get_segments(m_findExecutable);
 		for (auto& segment : segments)
 		{
-			FindPatterns(segment.first, segment.second);
+			if (m_ignoreLibrarys.empty())
+			{
+				Matches(segment.second.first, segment.second.second);
+			}
+			else
+			{
+				for (auto& ignoreLibrary : m_ignoreLibrarys)
+				{
+					if (segment.first.first != ignoreLibrary)
+					{
+						Matches(segment.second.first, segment.second.second);
+					}
+				}
+			}
 		}
 	}
 
