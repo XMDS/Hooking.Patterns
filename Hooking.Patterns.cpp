@@ -122,7 +122,7 @@ namespace hook
 
 		if (base == 0u)
 		{
-			uintptr_t arg[2] = { (uintptr_t)librarys.c_str(), (uintptr_t)&base };
+			uintptr_t arg[2] = { (uintptr_t)librarys.c_str(), (uintptr_t)&base};
 			PATTERNS_DL_ITERATE_PHDR([](struct dl_phdr_info* info, size_t size, void* data) -> int
 				{
 					if (info->dlpi_phdr != nullptr)
@@ -132,7 +132,7 @@ namespace hook
 							if (strstr(info->dlpi_name, reinterpret_cast<const char*>(reinterpret_cast<uintptr_t*>(data)[0])) 
 								&& info->dlpi_phdr[i].p_type == PT_LOAD && info->dlpi_phdr[i].p_vaddr == 0u) // support for android 9.0+ arm64 elf (eg: libart.so)
 							{
-								*reinterpret_cast<uintptr_t**>(data)[1] = info->dlpi_addr;
+								*reinterpret_cast<uintptr_t**>(data)[0] = info->dlpi_addr;
 								PATTERNS_LOGIS("get_process_base: dl_iterate_phdr info: lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", info->dlpi_name, info->dlpi_addr);
 								return 1; // exit
 							}
@@ -173,7 +173,7 @@ namespace hook
 		{
 			while (std::getline(fp, buffer))
 			{
-				if (buffer.find(process_name) != std::string::npos && buffer.find("(deleted)") == std::string::npos)
+				if (buffer.find(process_name.c_str()) != std::string::npos && buffer.find("(deleted)") == std::string::npos)
 				{
 					std::string library_name = buffer.substr(buffer.find_last_of('/') + 1);
 
@@ -261,6 +261,7 @@ private:
 
 	// memory segment
 	// key: lib_name : id, value: begin : end
+	// All readable segments form memory
 	std::map<std::pair<const std::string, uint16_t>, std::pair<uintptr_t, uintptr_t>> m_segments;
 	// executable segment form memory, only type is PF_R or PF_X and flags is PT_LOAD
 	std::map<std::pair<const std::string, uint16_t>, std::pair<uintptr_t, uintptr_t>> m_executable_segments;
@@ -271,7 +272,7 @@ private:
 	void FindLibrarys()
 	{
 		m_name = (m_name.empty() ? details::get_process_name() : m_name);
-		
+
 		PATTERNS_DL_ITERATE_PHDR([](struct dl_phdr_info* info, size_t size, void* data) -> int
 			{
 				executable_meta* self = reinterpret_cast<executable_meta*>(data);
@@ -469,6 +470,9 @@ public:
 					m_sections.emplace(name, std::make_pair(begin, end));
 					m_executable_sections.clear();
 					m_executable_sections.emplace(name, std::make_pair(begin, end));
+
+					PATTERNS_LOGIS("executable_meta::Initialize: lib_name: %s, section_name: %s, begin: " PATTERNS_ADDR_FMT ", end: " PATTERNS_ADDR_FMT "", 
+						name.first.c_str(), name.second.c_str(), begin, end);
 					break;
 				}
 			}
@@ -485,6 +489,9 @@ public:
 					m_segments.emplace(name, std::make_pair(begin, end));
 					m_executable_segments.clear();
 					m_executable_segments.emplace(name, std::make_pair(begin, end));
+
+					PATTERNS_LOGIS("executable_meta::Initialize: lib_name: %s, segment_id: %d, begin: " PATTERNS_ADDR_FMT ", end: " PATTERNS_ADDR_FMT "", 
+						name.first.c_str(), name.second, begin, end);
 					break;
 				}
 			}
@@ -493,14 +500,16 @@ public:
 
 	void Initialize(uintptr_t begin, uintptr_t end)
 	{
+		PATTERNS_LOGIS("executable_meta::Initialize: name: %s, begin: " PATTERNS_ADDR_FMT ", end: " PATTERNS_ADDR_FMT "", m_name.c_str(), begin, end);
+		
 		if (begin >= end && begin != 0u && end != 0u)
 		{
-			PATTERNS_LOGE("executable_meta: begin >= end");
+			PATTERNS_LOGE("executable_meta::Initialize: begin >= end");
 			return;
 		}
 		if (begin == 0u && end == 0u)
 		{
-			PATTERNS_LOGW("executable_meta: begin and end is 0. find all segments or sections in the process by default.");
+			PATTERNS_LOGW("executable_meta::Initialize: begin and end is 0. find all segments or sections in the process by default.");
 			FindLibrarys();
 			return;
 		}
@@ -539,6 +548,9 @@ public:
 						m_sections.emplace(name, std::make_pair(begin, end));
 						m_executable_sections.clear();
 						m_executable_sections.emplace(name, std::make_pair(begin, end));
+
+						PATTERNS_LOGIS("executable_meta::Initialize: lib_name: %s, section_name: %s, begin: " PATTERNS_ADDR_FMT ", end: " PATTERNS_ADDR_FMT "", 
+							name.first.c_str(), name.second.c_str(), begin, end);
 						break;
 					}
 				}
@@ -555,6 +567,9 @@ public:
 						m_segments.emplace(name, std::make_pair(begin, end));
 						m_executable_segments.clear();
 						m_executable_segments.emplace(name, std::make_pair(begin, end));
+
+						PATTERNS_LOGIS("executable_meta::Initialize: lib_name: %s, segment_id: %d, begin: " PATTERNS_ADDR_FMT ", end: " PATTERNS_ADDR_FMT "", 
+							name.first.c_str(), name.second, begin, end);
 						break;
 					}
 				}
