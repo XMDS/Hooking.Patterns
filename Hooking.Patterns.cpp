@@ -122,7 +122,7 @@ namespace hook
 
 		if (base == 0u)
 		{
-			uintptr_t arg[2] = { (uintptr_t)librarys.c_str(), (uintptr_t)&base};
+			uintptr_t arg[2] = { (uintptr_t)librarys.c_str(), (uintptr_t)&base };
 			PATTERNS_DL_ITERATE_PHDR([](struct dl_phdr_info* info, size_t size, void* data) -> int
 				{
 					if (info->dlpi_phdr != nullptr)
@@ -132,7 +132,7 @@ namespace hook
 							if (strstr(info->dlpi_name, reinterpret_cast<const char*>(reinterpret_cast<uintptr_t*>(data)[0])) 
 								&& info->dlpi_phdr[i].p_type == PT_LOAD && info->dlpi_phdr[i].p_vaddr == 0u) // support for android 9.0+ arm64 elf (eg: libart.so)
 							{
-								*reinterpret_cast<uintptr_t**>(data)[0] = info->dlpi_addr;
+								*reinterpret_cast<uintptr_t**>(data)[1] = info->dlpi_addr;
 								PATTERNS_LOGIS("get_process_base: dl_iterate_phdr info: lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", info->dlpi_name, info->dlpi_addr);
 								return 1; // exit
 							}
