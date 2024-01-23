@@ -129,7 +129,7 @@ namespace hook
 
 		public:
 			explicit basic_pattern_impl()
-				: m_rangeStart(0), m_rangeEnd(0)
+				: m_libName(get_process_name()), m_rangeStart(0), m_rangeEnd(0)
 			{
 			}
 
@@ -288,6 +288,8 @@ namespace hook
 			m_findSection = false;
 			m_findExecutable = true;
 			m_sectionNames.clear();
+			m_ignoreLibrarys.clear();
+			m_ignoreSections.clear();
 			return std::forward<basic_pattern>(*this);
 		}
 

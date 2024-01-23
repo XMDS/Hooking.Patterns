@@ -667,7 +667,7 @@ void basic_pattern_impl::Initialize(std::string_view pattern)
 #if PATTERNS_USE_HINTS
 	// if there's hints, try those first
 #if PATTERNS_CAN_SERIALIZE_HINTS
-	if (m_rangeStart == reinterpret_cast<uintptr_t>(GetModuleHandle(nullptr)))
+	if (m_rangeStart == get_process_base(m_libName))
 #endif
 	{
 		auto range = getHints().equal_range(m_hash);
