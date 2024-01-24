@@ -1,0 +1,23 @@
+{
+    "configurations": [
+        {
+            "name": "Android",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "${env:ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/**",
+                "${env:ANDROID_NDK_HOME}/sources/cxx-stl/system/include/**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "clang-arm",
+            "compilerPath": "${env:ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/windows-x86_64/bin/clang++.exe"
+        }
+    ],
+    "version": 4
+}

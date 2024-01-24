@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "string_view": "cpp",
+        "cassert": "cpp",
+        "utility": "cpp",
+        "vector": "cpp",
+        "string": "cpp",
+        "iosfwd": "cpp"
+    }
+}
