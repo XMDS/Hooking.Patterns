@@ -18,23 +18,40 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# Hooking.Patterns - ndk-build
-# form Android ndk-build
+# Android NDK - Message include
+# form Google Android NDK
 # https://github.com/android/ndk
 # https://developer.android.google.cn/ndk/guides/ndk-build
 # https://developer.android.google.cn/ndk/guides/android_mk
 # https://developer.android.google.cn/ndk/guides/application_mk
 
-NDK_TOOLCHAIN_VERSION := clang
+$(info Android NDK - Message include)
 
-APP_STL := c++_static
-
-APP_ABI := armeabi-v7a arm64-v8a
-
-ifeq ($(NDK_DEBUG), 1)
-	APP_OPTIM := debug
-else
-	APP_OPTIM := release
+ifeq ($(NDK_LOG), 1)
+    $(warning Please use NDK_LOG=0 to disable the ndk log.)
 endif
 
-APP_PLATFORM := android-21
+define message
+    $(info $(1))
+endef
+
+define warning
+    $(warning $(1))
+endef
+
+# use error end the build process
+define error
+    $(error $(1))
+endef
+
+define info
+    $(call message, $(1))
+endef
+
+# use example:
+# $(call info, "Hello World!")
+# $(call warning, "Hello World!")
+# $(call error, "Hello World!")
+# $(call message, "Hello World!")
+# $(call message, LOCAL_PATH: $(LOCAL_PATH))
+# Android NDK - Message include end
