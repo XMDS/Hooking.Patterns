@@ -29,7 +29,7 @@ project(HookingPatterns VERSION 0.1.0 LANGUAGES C CXX)
 
 Message("CMakeBuilds: ${CMAKE_SYSTEM_NAME}-${PROJECT_NAME}-${PROJECT_VERSION}\n")
 
-option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+option(BUILD_SHARED_LIBS "Build shared library" ON)
 
 include(CTest)
 enable_testing()

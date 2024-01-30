@@ -25,13 +25,16 @@ xdl_addr(reinterpret_cast<void*>(addr), &vname, &cache)
 #define PATTERNS_DL_ADDR_CLEAN xdl_addr_clean(&cache)
 #define PATTERNS_DL_ITERATE_PHDR(callback, data) xdl_iterate_phdr(callback, data, XDL_DEFAULT | XDL_FULL_PATHNAME)
 #else
-#include <link.h>
 #include <dlfcn.h>
+#include <link.h>
 #define PATTERNS_DL_OPEN(name, flags) dlopen(name, flags)
 #define PATTERNS_DL_ADDR(addr, vname) Dl_info vname; \
 dladdr(reinterpret_cast<void*>(addr), &vname)
 #define PATTERNS_DL_ADDR_CLEAN
 #define PATTERNS_DL_ITERATE_PHDR(callback, data) dl_iterate_phdr(callback, data)
+#if __ANDROID_API__ < 21
+#error dl_iterate_phdr is not supported on this platform (android 4.4). Please use xDL. Enable PATTERNS_USE_XDL.
+#endif
 #endif // PATTERNS_USE_XDL
 
  // The Android logging library may potentially cause some performance overhead and affect the execution speed of the code. 
@@ -54,16 +57,16 @@ dladdr(reinterpret_cast<void*>(addr), &vname)
 #define PATTERNS_LOGWS(...) ((void)0)
 #endif
 
-#ifdef __arm__
+#ifndef __LP64__
 typedef Elf32_Ehdr Elf_ehdr;
 typedef elf32_phdr elf_phdr;
 typedef elf32_shdr elf_shdr;
 #define PATTERNS_ADDR_FMT "0x%" PRIx32
-#elif __aarch64__
+#else
 typedef Elf64_Ehdr Elf_ehdr;
 typedef elf64_phdr elf_phdr;
 typedef elf64_shdr elf_shdr;
-#define PATTERNS_ADDR_FMT "0x%" PRIx64
+#define PATTERNS_ADDR_FMT "0x%" PRIx64 // warning
 #endif // 
 
 
@@ -133,7 +136,7 @@ namespace hook
 								&& info->dlpi_phdr[i].p_type == PT_LOAD && info->dlpi_phdr[i].p_vaddr == 0u) // support for android 9.0+ arm64 elf (eg: libart.so)
 							{
 								*reinterpret_cast<uintptr_t**>(data)[1] = info->dlpi_addr;
-								PATTERNS_LOGIS("get_process_base: dl_iterate_phdr info: lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", info->dlpi_name, info->dlpi_addr);
+								PATTERNS_LOGIS("get_process_base: dl_iterate_phdr info: lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", info->dlpi_name, (uintptr_t)info->dlpi_addr);
 								return 1; // exit
 							}
 						}
@@ -326,8 +329,8 @@ private:
 						{
 							self->m_executable_sections.emplace(std::make_pair(info->dlpi_name, name), 
 								std::make_pair(info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size));
-							PATTERNS_LOGIS("Explain elf file: executable section: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
-							PATTERNS_LOGIS("section info: section_name: %s, section_start: " PATTERNS_ADDR_FMT ", section_end: " PATTERNS_ADDR_FMT "", name.c_str(), info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size);
+							PATTERNS_LOGIS("Explain elf file: executable section: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", self->m_name.c_str(), info->dlpi_name, (uintptr_t)info->dlpi_addr);
+							PATTERNS_LOGIS("section info: section_name: %s, section_start: " PATTERNS_ADDR_FMT ", section_end: " PATTERNS_ADDR_FMT "", name.c_str(), (uintptr_t)(info->dlpi_addr + sec_info->sh_addr), (uintptr_t)(info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size));
 						}
 						if (sec_info->sh_addr == 0 && name.empty()) // .elf_head
 						{
@@ -336,8 +339,8 @@ private:
 						}
 						self->m_sections.emplace(std::make_pair(info->dlpi_name, name), 
 							std::make_pair(info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size));
-						PATTERNS_LOGIS("Explain elf file: section: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
-						PATTERNS_LOGIS("section info: section_name: %s, section_start: " PATTERNS_ADDR_FMT ", section_end: " PATTERNS_ADDR_FMT "", name.c_str(), info->dlpi_addr + sec_info->sh_addr, info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size);
+						PATTERNS_LOGIS("Explain elf file: section: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", self->m_name.c_str(), info->dlpi_name, (uintptr_t)info->dlpi_addr);
+						PATTERNS_LOGIS("section info: section_name: %s, section_start: " PATTERNS_ADDR_FMT ", section_end: " PATTERNS_ADDR_FMT "", name.c_str(), (uintptr_t)(info->dlpi_addr + sec_info->sh_addr), (uintptr_t)(info->dlpi_addr + sec_info->sh_addr + sec_info->sh_size));
 					}
 
 					self->m_elf.emplace(ehdr, fsize);
@@ -383,16 +386,16 @@ private:
 										self->m_executable_segments.emplace(std::make_pair(info->dlpi_name, j), 
 											std::make_pair(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
 										PATTERNS_LOGIS("Explain elf file: executable segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", 
-											self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
+											self->m_name.c_str(), info->dlpi_name, (uintptr_t)info->dlpi_addr);
 										PATTERNS_LOGIS("segment info: id: %d, segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT "", 
-											j, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+											j, (uintptr_t)(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr), (uintptr_t)(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
 									}
 									self->m_segments.emplace(std::make_pair(info->dlpi_name, j), 
 										std::make_pair(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
 									PATTERNS_LOGIS("Explain elf file: segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", 
-										self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
+										self->m_name.c_str(), info->dlpi_name, (uintptr_t)info->dlpi_addr);
 									PATTERNS_LOGIS("segment info: id: %d, segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT "", 
-										j, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+										j, (uintptr_t)(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr), (uintptr_t)(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
 								}
 								l = segment_lib_name.erase(l);
 								continue; // next
@@ -414,16 +417,16 @@ private:
 									self->m_executable_segments.emplace(std::make_pair(info->dlpi_name, j), 
 										std::make_pair(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
 									PATTERNS_LOGIS("Explain elf file: executable segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", 
-										self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
+										self->m_name.c_str(), info->dlpi_name, (uintptr_t)info->dlpi_addr);
 									PATTERNS_LOGIS("segment info: id: %d, segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT "", 
-										j, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+										j, (uintptr_t)(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr), (uintptr_t)(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
 								}
 								self->m_segments.emplace(std::make_pair(info->dlpi_name, j), 
 									std::make_pair(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
 								PATTERNS_LOGIS("Explain elf file: segment: process_name: %s, lib_name: %s, lib_base: " PATTERNS_ADDR_FMT "", 
-									self->m_name.c_str(), info->dlpi_name, info->dlpi_addr);
+									self->m_name.c_str(), info->dlpi_name, (uintptr_t)info->dlpi_addr);
 								PATTERNS_LOGIS("segment info: id: %d, segment_start: " PATTERNS_ADDR_FMT ", segment_end: " PATTERNS_ADDR_FMT "", 
-									j, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr, info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz);
+									j, (uintptr_t)(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr), (uintptr_t)(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr + info->dlpi_phdr[j].p_memsz));
 							}
 							return 1; // exit
 						}

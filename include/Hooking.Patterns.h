@@ -348,12 +348,37 @@ namespace hook
 	{
 		return pattern(module, std::move(bytes));
 	}
-
+	
+	inline auto make_module_pattern(const std::string& lib_name, void* module, std::string_view bytes)
+	{
+		return pattern(lib_name, module, std::move(bytes));
+	}
+	
 	inline auto make_range_pattern(uintptr_t begin, uintptr_t end, std::string_view bytes)
 	{
 		return pattern(begin, end, std::move(bytes));
 	}
 
+	inline auto make_range_pattern(const std::string& lib_name, uintptr_t begin, uintptr_t end, std::string_view bytes)
+	{
+		return pattern(lib_name, begin, end, std::move(bytes));
+	}
+	
+	inline auto make_section_pattern(const std::string& section, std::string_view bytes)
+	{
+		return pattern(section, std::move(bytes));
+	}
+	
+	inline auto make_section_pattern(const std::string& lib_name, const std::string& section, std::string_view bytes)
+	{
+		return pattern(lib_name, section, std::move(bytes));
+	}
+
+	inline auto make_section_pattern(const std::string& lib_name, const std::string& section, uintptr_t begin, uintptr_t end, std::string_view bytes)
+	{
+		return pattern(lib_name, section, begin, end, std::move(bytes));
+	}
+	
 	template<typename T = void>
 	inline auto get_pattern(std::string_view pattern_string, ptrdiff_t offset = 0)
 	{
@@ -369,7 +394,12 @@ namespace hook
 	{
 		return make_range_pattern(begin, end, std::move(bytes));
 	}
-
+	
+	inline auto section_pattern(const std::string& section, std::string_view bytes)
+	{
+		return make_section_pattern(section, std::move(bytes));
+	}
+	
 	namespace txn
 	{
 		using pattern = hook::basic_pattern<exception_err_policy>;
@@ -379,9 +409,34 @@ namespace hook
 			return pattern(module, std::move(bytes));
 		}
 
+		inline auto make_module_pattern(const std::string& lib_name, void* module, std::string_view bytes)
+		{
+			return pattern(lib_name, module, std::move(bytes));
+		}
+		
 		inline auto make_range_pattern(uintptr_t begin, uintptr_t end, std::string_view bytes)
 		{
 			return pattern(begin, end, std::move(bytes));
+		}
+		
+		inline auto make_range_pattern(const std::string& lib_name, uintptr_t begin, uintptr_t end, std::string_view bytes)
+		{
+			return pattern(lib_name, begin, end, std::move(bytes));
+		}
+
+		inline auto make_section_pattern(const std::string& section, std::string_view bytes)
+		{
+			return pattern(section, std::move(bytes));
+		}
+
+		inline auto make_section_pattern(const std::string& lib_name, const std::string& section, std::string_view bytes)
+		{
+			return pattern(lib_name, section, std::move(bytes));
+		}
+
+		inline auto make_section_pattern(const std::string& lib_name, const std::string& section, uintptr_t begin, uintptr_t end, std::string_view bytes)
+		{
+			return pattern(lib_name, section, begin, end, std::move(bytes));
 		}
 
 		template<typename T = void>
@@ -398,6 +453,11 @@ namespace hook
 		inline auto range_pattern(uintptr_t begin, uintptr_t end, std::string_view bytes)
 		{
 			return make_range_pattern(begin, end, std::move(bytes));
+		}
+
+		inline auto section_pattern(const std::string& section, std::string_view bytes)
+		{
+			return make_section_pattern(section, std::move(bytes));
 		}
 	}
 }
