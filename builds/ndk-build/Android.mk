@@ -1,15 +1,15 @@
 # Copyright (c) 2024 晓梦大师/XMDS
-
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -17,6 +17,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+#
 
 # Hooking.Patterns - ndk-build
 # form Google Android NDK
@@ -48,9 +49,11 @@ LOCAL_C_INCLUDES := $(MY_PROJECT_PATH)/include
 
 # xdl module
 # https://github.com/hexhacking/xDL
-$(call message, xdl module. It is recommended to always enable it)
+$(call message, xdl module. Supports Android 4.4 - 5.x. it is recommended to always enable it)
 ifeq ($(PATTERNS_USE_XDL), 1)
-	MY_XDL_PATH := $(MY_PROJECT_PATH)/3rdLibrarys/xDL/xdl/src/main/cpp
+$(call message, Enable use XDL library)
+	
+	MY_XDL_PATH := $(MY_PROJECT_PATH)/3rdLibrarys/xdl
 
 	LOCAL_SRC_FILES += $(MY_XDL_PATH)/xdl.c $(MY_XDL_PATH)/xdl_iterate.c \
 	$(MY_XDL_PATH)/xdl_linker.c $(MY_XDL_PATH)/xdl_lzma.c $(MY_XDL_PATH)/xdl_util.c
@@ -61,8 +64,15 @@ ifeq ($(PATTERNS_USE_XDL), 1)
 	LOCAL_CXXFLAGS += -DPATTERNS_USE_XDL
 endif
 
-# Disable the use of hints
-# LOCAL_CXXFLAGS += -DPATTERNS_USE_HINTS -DPATTERNS_CAN_SERIALIZE_HINTS
+ifeq ($(PATTERNS_USE_HINTS), 1)
+$(call message, Enable use hints)
+	LOCAL_CXXFLAGS += -DPATTERNS_USE_HINTS
+endif
+
+ifeq ($(PATTERNS_CAN_SERIALIZE_HINTS), 1)
+$(call message, "Enable serialize hints")
+	LOCAL_CXXFLAGS += -DPATTERNS_CAN_SERIALIZE_HINTS
+endif
 
 ifeq ($(NDK_DEBUG), 1)
 $(call message, Debug mode)

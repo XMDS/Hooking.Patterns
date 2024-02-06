@@ -11,6 +11,8 @@
 #include <cassert>
 #include <vector>
 #include <string>
+#include <sstream>
+#include <iomanip>
 #include <string_view>
 #include <initializer_list>
 
@@ -177,8 +179,11 @@ namespace hook
 
 			explicit basic_pattern_impl(const std::string& lib_or_section_name, std::string_view pattern)
 			{
-				if ((lib_or_section_name.find("lib") != std::string::npos && lib_or_section_name.find(".so") != std::string::npos) || 
-					lib_or_section_name.find("/") != std::string::npos)
+				if (lib_or_section_name.empty())
+				{
+					return;
+				}
+				if (lib_or_section_name[0] != '.')
 				{
 					new(this) basic_pattern_impl(lib_or_section_name, get_process_base(lib_or_section_name));
 					Initialize(std::move(pattern));
@@ -188,7 +193,7 @@ namespace hook
 					new(this) basic_pattern_impl(get_process_name(), lib_or_section_name, std::move(pattern));
 				}
 			}
-
+			
 			// Pretransformed patterns
 			inline basic_pattern_impl(const std::string& lib_name, std::basic_string_view<uint8_t> bytes, std::basic_string_view<uint8_t> mask)
 				: basic_pattern_impl(lib_name, get_process_base(lib_name))
@@ -379,6 +384,127 @@ namespace hook
 		return pattern(lib_name, section, begin, end, std::move(bytes));
 	}
 	
+	inline auto make_string_pattern(uintptr_t begin, uintptr_t end, const std::string& str)
+	{
+		const unsigned char* bytes = reinterpret_cast<const unsigned char*>(str.data());
+		std::stringstream ss;
+
+		size_t len = str.size();
+		for (size_t i = 0; i < len; ++i)
+		{
+			ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+		}
+		return pattern(begin, end, ss.str());
+	}
+
+	inline auto make_string_pattern(const std::string& lib_name, uintptr_t begin, uintptr_t end, const std::string& str)
+	{
+		const unsigned char* bytes = reinterpret_cast<const unsigned char*>(str.data());
+		std::stringstream ss;
+
+		size_t len = str.size();
+		for (size_t i = 0; i < len; ++i)
+		{
+			ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+		}
+		return pattern(lib_name, begin, end, ss.str());
+	}
+
+	inline auto make_string_pattern(const std::string& lib_or_section_name, const std::string& str)
+	{
+		const unsigned char* bytes = reinterpret_cast<const unsigned char*>(str.data());
+		std::stringstream ss;
+
+		size_t len = str.size();
+		for (size_t i = 0; i < len; ++i)
+		{
+			ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+		}
+		return pattern(lib_or_section_name, ss.str());
+	}
+
+	inline auto make_string_pattern(const std::string& lib_name, const std::string& section, const std::string& str)
+	{
+		const unsigned char* bytes = reinterpret_cast<const unsigned char*>(str.data());
+		std::stringstream ss;
+
+		size_t len = str.size();
+		for (size_t i = 0; i < len; ++i)
+		{
+			ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+		}
+		return pattern(lib_name, section, ss.str());
+	}
+	
+	inline auto make_string_pattern(const std::string& lib_name, const std::string& section, uintptr_t begin, uintptr_t end, const std::string& str)
+	{
+		const unsigned char* bytes = reinterpret_cast<const unsigned char*>(str.data());
+		std::stringstream ss;
+
+		size_t len = str.size();
+		for (size_t i = 0; i < len; ++i)
+		{
+			ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+		}
+		return pattern(lib_name, section, begin, end, ss.str());
+	}
+
+	template <typename T>
+	inline auto make_data_pattern(const std::string& lib_name, const T& data)
+	{
+		const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&data);
+		std::stringstream ss;
+
+		size_t len = sizeof(T);
+		for (size_t i = 0; i < len; ++i)
+		{
+			ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+		}
+		return pattern(lib_name, ss.str());
+	}
+	
+	template <typename T>
+	inline auto make_data_pattern(uintptr_t begin, uintptr_t end, const T& data)
+	{
+		const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&data);
+		std::stringstream ss;
+
+		size_t len = sizeof(T);
+		for (size_t i = 0; i < len; ++i)
+		{
+			ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+		}
+		return pattern(begin, end, ss.str());
+	}
+	
+	template <typename T>
+	inline auto make_data_pattern(const std::string& lib_name, const std::string& section, const T& data)
+	{
+		const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&data);
+		std::stringstream ss;
+
+		size_t len = sizeof(T);
+		for (size_t i = 0; i < len; ++i)
+		{
+			ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+		}
+		return pattern(lib_name, section, ss.str());
+	}
+
+	template <typename T>
+	inline auto make_data_pattern(const std::string& lib_name, const std::string& section, uintptr_t begin, uintptr_t end, const T& data)
+	{
+		const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&data);
+		std::stringstream ss;
+
+		size_t len = sizeof(T);
+		for (size_t i = 0; i < len; ++i)
+		{
+			ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+		}
+		return pattern(lib_name, section, begin, end, ss.str());
+	}
+	
 	template<typename T = void>
 	inline auto get_pattern(std::string_view pattern_string, ptrdiff_t offset = 0)
 	{
@@ -439,6 +565,127 @@ namespace hook
 			return pattern(lib_name, section, begin, end, std::move(bytes));
 		}
 
+		inline auto make_string_pattern(uintptr_t begin, uintptr_t end, const std::string& str)
+		{
+			const unsigned char* bytes = reinterpret_cast<const unsigned char*>(str.data());
+			std::stringstream ss;
+
+			size_t len = str.size();
+			for (size_t i = 0; i < len; ++i)
+			{
+				ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+			}
+			return pattern(begin, end, ss.str());
+		}
+
+		inline auto make_string_pattern(const std::string& lib_name, uintptr_t begin, uintptr_t end, const std::string& str)
+		{
+			const unsigned char* bytes = reinterpret_cast<const unsigned char*>(str.data());
+			std::stringstream ss;
+
+			size_t len = str.size();
+			for (size_t i = 0; i < len; ++i)
+			{
+				ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+			}
+			return pattern(lib_name, begin, end, ss.str());
+		}
+
+		inline auto make_string_pattern(const std::string& lib_or_section_name, const std::string& str)
+		{
+			const unsigned char* bytes = reinterpret_cast<const unsigned char*>(str.data());
+			std::stringstream ss;
+
+			size_t len = str.size();
+			for (size_t i = 0; i < len; ++i)
+			{
+				ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+			}
+			return pattern(lib_or_section_name, ss.str());
+		}
+
+		inline auto make_string_pattern(const std::string& lib_name, const std::string& section, const std::string& str)
+		{
+			const unsigned char* bytes = reinterpret_cast<const unsigned char*>(str.data());
+			std::stringstream ss;
+
+			size_t len = str.size();
+			for (size_t i = 0; i < len; ++i)
+			{
+				ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+			}
+			return pattern(lib_name, section, ss.str());
+		}
+
+		inline auto make_string_pattern(const std::string& lib_name, const std::string& section, uintptr_t begin, uintptr_t end, const std::string& str)
+		{
+			const unsigned char* bytes = reinterpret_cast<const unsigned char*>(str.data());
+			std::stringstream ss;
+
+			size_t len = str.size();
+			for (size_t i = 0; i < len; ++i)
+			{
+				ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+			}
+			return pattern(lib_name, section, begin, end, ss.str());
+		}
+
+		template <typename T>
+		inline auto make_data_pattern(const std::string& lib_name, const T& data)
+		{
+			const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&data);
+			std::stringstream ss;
+
+			size_t len = sizeof(T);
+			for (size_t i = 0; i < len; ++i)
+			{
+				ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+			}
+			return pattern(lib_name, ss.str());
+		}
+
+		template <typename T>
+		inline auto make_data_pattern(uintptr_t begin, uintptr_t end, const T& data)
+		{
+			const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&data);
+			std::stringstream ss;
+
+			size_t len = sizeof(T);
+			for (size_t i = 0; i < len; ++i)
+			{
+				ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+			}
+			return pattern(begin, end, ss.str());
+		}
+
+		template <typename T>
+		inline auto make_data_pattern(const std::string& lib_name, const std::string& section, const T& data)
+		{
+			const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&data);
+			std::stringstream ss;
+
+			size_t len = sizeof(T);
+			for (size_t i = 0; i < len; ++i)
+			{
+				ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+			}
+			return pattern(lib_name, section, ss.str());
+		}
+
+		template <typename T>
+		inline auto make_data_pattern(const std::string& lib_name, const std::string& section, uintptr_t begin, uintptr_t end, const T& data)
+		{
+			const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&data);
+			std::stringstream ss;
+
+			size_t len = sizeof(T);
+			for (size_t i = 0; i < len; ++i)
+			{
+				ss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(bytes[i]) << " ";
+			}
+			return pattern(lib_name, section, begin, end, ss.str());
+		}
+		
 		template<typename T = void>
 		inline auto get_pattern(std::string_view pattern_string, ptrdiff_t offset = 0)
 		{

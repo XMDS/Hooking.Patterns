@@ -6,4 +6,4 @@ set BUILD_TYPE=Debug
 :: call build.bat
 call build.bat
 
-PAUSE
+pause

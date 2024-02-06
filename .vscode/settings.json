@@ -6,6 +6,11 @@
         "vector": "cpp",
         "string": "cpp",
         "iosfwd": "cpp",
-        "algorithm": "cpp"
+        "algorithm": "cpp",
+        "cmath": "cpp",
+        "cstddef": "cpp",
+        "cstdio": "cpp",
+        "cstdlib": "cpp",
+        "cstring": "cpp"
     }
 }
