@@ -183,7 +183,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PreprocessorDefinitions>DEBUG;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\include;..\..\3rdLibrarys\xDL\xdl\src\main\cpp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;D:\MyCode\c++\Hooking.Patterns\3rdLibrarys\xdl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <ExceptionHandling>Enabled</ExceptionHandling>
@@ -195,7 +195,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PreprocessorDefinitions>DEBUG;__LP64__;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\include;..\..\3rdLibrarys\xDL\xdl\src\main\cpp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;D:\MyCode\c++\Hooking.Patterns\3rdLibrarys\xdl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <ExceptionHandling>Enabled</ExceptionHandling>
@@ -206,8 +206,8 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug x86a|x86'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <PreprocessorDefinitions>DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\include;..\..\3rdLibrarys\xDL\xdl\src\main\cpp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>DEBUG;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\include;D:\MyCode\c++\Hooking.Patterns\3rdLibrarys\xdl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <ExceptionHandling>Enabled</ExceptionHandling>
@@ -219,7 +219,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PreprocessorDefinitions>DEBUG;__LP64__;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\include;..\..\3rdLibrarys\xDL\xdl\src\main\cpp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;D:\MyCode\c++\Hooking.Patterns\3rdLibrarys\xdl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <ExceptionHandling>Enabled</ExceptionHandling>
@@ -231,7 +231,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PreprocessorDefinitions>NDEBUG;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\include;..\..\3rdLibrarys\xDL\xdl\src\main\cpp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;D:\MyCode\c++\Hooking.Patterns\3rdLibrarys\xdl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -250,7 +250,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PreprocessorDefinitions>NDEBUG;__LP64__;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\include;..\..\3rdLibrarys\xDL\xdl\src\main\cpp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;D:\MyCode\c++\Hooking.Patterns\3rdLibrarys\xdl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -268,8 +268,8 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release x86a|x86'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\include;..\..\3rdLibrarys\xDL\xdl\src\main\cpp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\include;D:\MyCode\c++\Hooking.Patterns\3rdLibrarys\xdl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -288,7 +288,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PreprocessorDefinitions>NDEBUG;__LP64__;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\include;..\..\3rdLibrarys\xDL\xdl\src\main\cpp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\include;D:\MyCode\c++\Hooking.Patterns\3rdLibrarys\xdl\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -305,21 +305,24 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
     <ClCompile>
-      <PreprocessorDefinitions>DEBUG;__LP64__;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DEBUG;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
     <ClCompile>
-      <PreprocessorDefinitions>NDEBUG;__LP64__;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;PATTERNS_ANDROID_LOGGING;PATTERNS_USE_XDL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\3rdLibrarys\xDL\xdl\src\main\cpp\xdl.c" />
-    <ClCompile Include="..\..\3rdLibrarys\xDL\xdl\src\main\cpp\xdl_iterate.c" />
-    <ClCompile Include="..\..\3rdLibrarys\xDL\xdl\src\main\cpp\xdl_linker.c" />
-    <ClCompile Include="..\..\3rdLibrarys\xDL\xdl\src\main\cpp\xdl_lzma.c" />
-    <ClCompile Include="..\..\3rdLibrarys\xDL\xdl\src\main\cpp\xdl_util.c" />
+    <ClCompile Include="..\..\3rdLibrarys\xdl\xdl.c" />
+    <ClCompile Include="..\..\3rdLibrarys\xdl\xdl_iterate.c" />
+    <ClCompile Include="..\..\3rdLibrarys\xdl\xdl_linker.c" />
+    <ClCompile Include="..\..\3rdLibrarys\xdl\xdl_lzma.c" />
+    <ClCompile Include="..\..\3rdLibrarys\xdl\xdl_util.c" />
     <ClCompile Include="..\..\src\Hooking.Patterns.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\..\3rdLibrarys\xdl\xdl.map.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

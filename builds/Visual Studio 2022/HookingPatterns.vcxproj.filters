@@ -4,43 +4,36 @@
     <Filter Include="3rdLibrarys">
       <UniqueIdentifier>{B663406D-2219-B962-AB0D-B33917C2AF66}</UniqueIdentifier>
     </Filter>
-    <Filter Include="3rdLibrarys\xDL">
-      <UniqueIdentifier>{0D1CB319-79A7-20DE-82B8-A3D2EEC27CDE}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="3rdLibrarys\xDL\xdl">
-      <UniqueIdentifier>{242CE8B6-908D-C5C4-19FB-0B77855BFC83}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="3rdLibrarys\xDL\xdl\src">
-      <UniqueIdentifier>{3B5CC509-A793-0DA1-B09D-71C41C54349A}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="3rdLibrarys\xDL\xdl\src\main">
-      <UniqueIdentifier>{AF28AF14-9BE3-9EC0-449B-170B3035E950}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="3rdLibrarys\xDL\xdl\src\main\cpp">
-      <UniqueIdentifier>{01627DB4-EDB2-68F6-1617-57B802C7FB5F}</UniqueIdentifier>
-    </Filter>
     <Filter Include="src">
       <UniqueIdentifier>{2DAB880B-99B4-887C-2230-9F7C8E38947C}</UniqueIdentifier>
     </Filter>
+    <Filter Include="3rdLibrarys\xdl">
+      <UniqueIdentifier>{7ac1b866-561e-46ec-ac8f-e8402154aa3b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\3rdLibrarys\xDL\xdl\src\main\cpp\xdl.c">
-      <Filter>3rdLibrarys\xDL\xdl\src\main\cpp</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\3rdLibrarys\xDL\xdl\src\main\cpp\xdl_iterate.c">
-      <Filter>3rdLibrarys\xDL\xdl\src\main\cpp</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\3rdLibrarys\xDL\xdl\src\main\cpp\xdl_linker.c">
-      <Filter>3rdLibrarys\xDL\xdl\src\main\cpp</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\3rdLibrarys\xDL\xdl\src\main\cpp\xdl_lzma.c">
-      <Filter>3rdLibrarys\xDL\xdl\src\main\cpp</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\3rdLibrarys\xDL\xdl\src\main\cpp\xdl_util.c">
-      <Filter>3rdLibrarys\xDL\xdl\src\main\cpp</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\Hooking.Patterns.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3rdLibrarys\xdl\xdl.c">
+      <Filter>3rdLibrarys\xdl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3rdLibrarys\xdl\xdl_iterate.c">
+      <Filter>3rdLibrarys\xdl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3rdLibrarys\xdl\xdl_linker.c">
+      <Filter>3rdLibrarys\xdl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3rdLibrarys\xdl\xdl_lzma.c">
+      <Filter>3rdLibrarys\xdl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3rdLibrarys\xdl\xdl_util.c">
+      <Filter>3rdLibrarys\xdl</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\..\3rdLibrarys\xdl\xdl.map.txt">
+      <Filter>3rdLibrarys\xdl</Filter>
+    </Text>
   </ItemGroup>
 </Project>
